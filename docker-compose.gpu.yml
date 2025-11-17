@@ -1,0 +1,200 @@
+# ============================================================================
+# FastTalk LLM Service - Docker Compose Configuration
+# GPU-optimized deployment
+# ============================================================================
+
+services:
+  # ============================================================================
+  # Ollama Service
+  # ============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    pull_policy: always
+    
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${GPU_DEVICE_ID:-0}']
+              capabilities: [gpu, compute, utility]
+    
+    environment:
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-0}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    
+    ports:
+      - "11434:11434"
+    
+    volumes:
+      - ollama_data:/root/.ollama
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Network
+    networks:
+      - fasttalk-network
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+
+  # ============================================================================
+  # LLM Microservice
+  # ============================================================================
+  llm-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+      args:
+        LLM_MODEL: ${LLM_MODEL:-llama3.2:1b}
+    image: fasttalk-llm-service:latest
+    container_name: llm-service
+    restart: unless-stopped
+
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${GPU_DEVICE_ID:-0}']
+              capabilities: [gpu, compute, utility]
+          memory: 16g
+        limits:
+          memory: ${MEM_LIMIT:-32g}
+
+    environment:
+      # GPU Configuration
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-0}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+      # Model Configuration
+      - LLM_MODEL=${LLM_MODEL:-llama3.2:1b}
+      - MODEL_PATH=/app/models
+
+      # Ollama Configuration
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-5m}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-600.0}
+
+      # Server Configuration
+      - LLM_HOST=0.0.0.0
+      - LLM_PORT=8000
+      - LLM_MONITORING_PORT=9092
+      - LLM_MAX_CONNECTIONS=${LLM_MAX_CONNECTIONS:-50}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # Generation Configuration
+      - DEFAULT_TEMPERATURE=${DEFAULT_TEMPERATURE:-0.7}
+      - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-2048}
+      - DEFAULT_CONTEXT_WINDOW=${DEFAULT_CONTEXT_WINDOW:-8192}
+      - DEFAULT_TOP_P=${DEFAULT_TOP_P:-0.9}
+      - DEFAULT_TOP_K=${DEFAULT_TOP_K:-40}
+
+      # Session Configuration
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-3600}
+      - MAX_HISTORY_LENGTH=${MAX_HISTORY_LENGTH:-50}
+
+    ports:
+      - "${LLM_PORT:-8000}:8000"
+      - "${LLM_MONITORING_PORT:-9092}:9092"
+
+    volumes:
+      - llm_logs:/app/logs
+      - llm_models:/app/models
+
+    # Shared memory for tensor operations
+    shm_size: ${SHM_SIZE:-2g}
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+
+    # Network
+    networks:
+      - fasttalk-network
+    
+    # Dependencies
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+
+# ============================================================================
+# Named Volumes
+# ============================================================================
+volumes:
+  llm_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_PATH:-./logs}
+  llm_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${MODELS_PATH:-./models}
+  ollama_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${OLLAMA_DATA_PATH:-./ollama-data}
+
+# ============================================================================
+# Network Configuration
+# ============================================================================
+networks:
+  fasttalk-network:
+    name: fasttalk-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.20.0.0/16}
+          gateway: ${NETWORK_GATEWAY:-172.20.0.1}

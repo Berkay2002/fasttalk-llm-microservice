@@ -1,0 +1,28 @@
+# ============================================================================
+# LLM Service Dependencies
+# ============================================================================
+
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+websockets==13.0
+python-multipart==0.0.9
+
+# HTTP Client for Ollama
+requests==2.32.3
+
+# Monitoring
+flask==3.0.3
+psutil==6.0.0
+
+# Async & Utils
+aiofiles==24.1.0
+python-dotenv==1.0.1
+
+# Conversation Management (for turn detection if needed)
+transformers==4.45.0
+torch==2.5.0
+
+# Data validation
+pydantic==2.9.0
+pydantic-settings==2.5.0
