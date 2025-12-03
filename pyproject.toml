@@ -1,0 +1,58 @@
+# ============================================================================
+# FastTalk LLM Microservice
+# ============================================================================
+# Language model inference service via Ollama.
+#
+# Development:
+#   uv venv && source .venv/bin/activate
+#   uv pip install -e ".[dev]"
+#
+# Docker builds use requirements.txt for simplicity and caching.
+
+[project]
+name = "fasttalk-llm"
+version = "1.0.0"
+description = "FastTalk LLM microservice"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+dependencies = [
+    # Web Framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "websockets>=13.0",
+    "python-multipart>=0.0.9",
+    
+    # HTTP Client for Ollama
+    "requests>=2.32.0",
+    
+    # Monitoring
+    "flask>=3.0.0",
+    "psutil>=6.0.0",
+    
+    # Async & Utils
+    "aiofiles>=24.1.0",
+    "python-dotenv>=1.0.1",
+    
+    # Conversation Management (for turn detection)
+    "transformers>=4.45.0",
+    "torch>=2.4.0",
+    
+    # Data validation
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
