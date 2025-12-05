@@ -1,16 +1,63 @@
 # FastTalk LLM Microservice
 
-A production-ready Large Language Model microservice providing WebSocket-based streaming inference with conversation management, built on Ollama.
+A production-ready Large Language Model microservice providing WebSocket-based streaming inference with conversation management. Supports **vLLM + PydanticAI** (primary) and Ollama (legacy) backends.
 
 ## Features
 
 - **Real-time Streaming**: Token-by-token streaming via WebSocket
+- **vLLM Backend**: High-performance inference with OpenAI-compatible API
+- **PydanticAI Agent**: Agentic capabilities with tool calling and web search
 - **Conversation Management**: Automatic conversation history and context management
 - **Multiple Sessions**: Support for concurrent sessions with isolated state
+- **Web Search**: Built-in DuckDuckGo search tool for current information
 - **Health Monitoring**: Comprehensive health checks and metrics
 - **Multi-Platform Support**: CUDA GPU, CPU, and Apple Silicon (MPS) acceleration
-- **Error Handling**: Circuit breakers, retry logic, and comprehensive error tracking
-- **Production Ready**: Docker containerization, structured logging, and monitoring
+- **Backward Compatible**: Still supports Ollama as legacy backend
+
+## Quick Start
+
+### Option 1: vLLM + PydanticAI (Recommended)
+
+```bash
+# Navigate to the service directory
+cd microservices/fasttalk-llm-microservice
+
+# Copy and configure environment
+cp .env.vllm.example .env
+
+# Create required directories
+mkdir -p logs vllm-cache
+
+# Start with vLLM backend
+docker compose -f docker-compose.vllm.yml up -d
+
+# Check logs
+docker compose -f docker-compose.vllm.yml logs -f llm-service
+```
+
+### Option 2: Ollama (Legacy)
+
+```bash
+# From the llm-service directory
+cd microservices/fasttalk-llm-microservice
+
+# Copy and configure environment
+cp .env.example .env
+
+# Start the service
+docker compose -f docker-compose.gpu.yml up -d
+```
+
+## Backend Comparison
+
+| Feature | vLLM + PydanticAI | Ollama |
+|---------|-------------------|--------|
+| **Performance** | ⚡ High throughput | 🔶 Good |
+| **Tool Calling** | ✅ Native support | ❌ Not supported |
+| **Web Search** | ✅ DuckDuckGo | ❌ Not supported |
+| **Streaming** | ✅ Native async | ✅ Sync |
+| **API Compatibility** | OpenAI-compatible | Ollama API |
+| **Setup Complexity** | Medium | Low |
 
 ## Compute Platform Support
 
@@ -20,11 +67,23 @@ The service supports three compute platforms:
 2. **CPU** - Universal compatibility, good for development and low-traffic deployments
 3. **Apple Silicon (MPS)** - Optimized for M1/M2/M3 Macs with GPU acceleration
 
-## Quick Start
+## Docker Deployment
 
-### Option 1: Docker Compose (Recommended)
+### vLLM + PydanticAI (CUDA GPU)
 
-#### CUDA GPU (NVIDIA)
+```bash
+# Copy and configure environment variables
+cp .env.vllm.example .env
+# Edit .env and set your preferences
+
+# Start the service
+docker compose -f docker-compose.vllm.yml up -d
+
+# Check logs
+docker compose -f docker-compose.vllm.yml logs -f llm-service
+```
+
+### Ollama (Legacy)
 
 ```bash
 # From the llm-service directory

@@ -66,12 +66,19 @@ class Config:
     Configuration settings for the LLM service.
 
     All settings can be overridden via environment variables.
+    Supports both Ollama and vLLM backends via LLM_PROVIDER setting.
     """
 
     # ============================================================================
     # Compute Device Configuration
     # ============================================================================
     compute_device: str = field(default_factory=_detect_compute_device)
+    
+    # ============================================================================
+    # LLM Provider Configuration
+    # ============================================================================
+    # Provider: 'ollama', 'vllm', or 'openai'
+    llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "vllm"))
     
     # ============================================================================
     # Model Configuration
@@ -81,7 +88,29 @@ class Config:
     device: str = field(default_factory=_detect_compute_device)
 
     # ============================================================================
-    # Ollama Configuration
+    # vLLM Configuration (NEW - Primary Backend)
+    # Runs model LOCALLY on GPU - no external API calls
+    # Default: AWQ 4-bit quantized Llama 3.1 8B for RTX 3090 Ti
+    # ============================================================================
+    vllm_base_url: str = field(default_factory=lambda: os.getenv("VLLM_BASE_URL", "http://vllm:8000/v1"))
+    vllm_model: str = field(default_factory=lambda: os.getenv("VLLM_MODEL", "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"))
+    vllm_api_key: str = field(default_factory=lambda: os.getenv("VLLM_API_KEY", "not-needed"))
+    vllm_timeout: float = field(default_factory=lambda: float(os.getenv("VLLM_TIMEOUT", "600.0")))
+
+    # ============================================================================
+    # PydanticAI Configuration (NEW - Agent Framework)
+    # ============================================================================
+    enable_pydantic_ai: bool = field(default_factory=lambda: os.getenv("ENABLE_PYDANTIC_AI", "true").lower() == "true")
+    enable_web_search: bool = field(default_factory=lambda: os.getenv("ENABLE_WEB_SEARCH", "true").lower() == "true")
+    enable_tools: bool = field(default_factory=lambda: os.getenv("ENABLE_TOOLS", "true").lower() == "true")
+    duckduckgo_rate_limit: float = field(default_factory=lambda: float(os.getenv("DUCKDUCKGO_RATE_LIMIT", "1.0")))
+    system_prompt: str = field(default_factory=lambda: os.getenv(
+        "SYSTEM_PROMPT",
+        "You are a helpful voice assistant. Keep responses concise and conversational."
+    ))
+
+    # ============================================================================
+    # Ollama Configuration (Legacy - Fallback Backend)
     # ============================================================================
     ollama_base_url: str = field(default_factory=lambda: os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"))
     ollama_keep_alive: str = field(default_factory=lambda: os.getenv("OLLAMA_KEEP_ALIVE", "5m"))
@@ -167,14 +196,29 @@ class Config:
         if self.max_connections < 1:
             raise ValueError(f"max_connections must be >= 1, got {self.max_connections}")
 
+        # Validate LLM provider
+        valid_providers = ("ollama", "vllm", "openai")
+        if self.llm_provider not in valid_providers:
+            raise ValueError(f"llm_provider must be one of {valid_providers}, got {self.llm_provider}")
+
     def _log_config(self):
         """Log current configuration."""
         logger.info("=" * 60)
         logger.info("LLM Service Configuration")
         logger.info("=" * 60)
+        logger.info(f"LLM Provider: {self.llm_provider}")
         logger.info(f"Compute Device: {self.compute_device}")
-        logger.info(f"Model: {self.model_name}")
-        logger.info(f"Ollama URL: {self.ollama_base_url}")
+        
+        if self.llm_provider == "vllm":
+            logger.info(f"vLLM Model: {self.vllm_model}")
+            logger.info(f"vLLM URL: {self.vllm_base_url}")
+            logger.info(f"PydanticAI Enabled: {self.enable_pydantic_ai}")
+            logger.info(f"Web Search Enabled: {self.enable_web_search}")
+            logger.info(f"Tools Enabled: {self.enable_tools}")
+        else:
+            logger.info(f"Model: {self.model_name}")
+            logger.info(f"Ollama URL: {self.ollama_base_url}")
+            
         logger.info(f"Server: {self.host}:{self.port}")
         logger.info(f"Monitoring: {self.monitoring_host}:{self.monitoring_port}")
         logger.info(f"Max Connections: {self.max_connections}")
@@ -187,12 +231,11 @@ class Config:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary."""
-        return {
+        base_config = {
+            "llm_provider": self.llm_provider,
             "compute_device": self.compute_device,
             "model_name": self.model_name,
             "device": self.device,  # Legacy field
-            "ollama_base_url": self.ollama_base_url,
-            "ollama_keep_alive": self.ollama_keep_alive,
             "host": self.host,
             "port": self.port,
             "monitoring_port": self.monitoring_port,
@@ -206,6 +249,23 @@ class Config:
             "num_workers": self.num_workers,
             "log_level": self.log_level,
         }
+        
+        # Add provider-specific config
+        if self.llm_provider == "vllm":
+            base_config.update({
+                "vllm_base_url": self.vllm_base_url,
+                "vllm_model": self.vllm_model,
+                "enable_pydantic_ai": self.enable_pydantic_ai,
+                "enable_web_search": self.enable_web_search,
+                "enable_tools": self.enable_tools,
+            })
+        else:
+            base_config.update({
+                "ollama_base_url": self.ollama_base_url,
+                "ollama_keep_alive": self.ollama_keep_alive,
+            })
+        
+        return base_config
 
     @classmethod
     def from_preset(cls, preset: str) -> "Config":

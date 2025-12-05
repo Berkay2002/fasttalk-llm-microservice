@@ -1,0 +1,224 @@
+# ============================================================================
+# FastTalk LLM Service - vLLM + PydanticAI Docker Compose Configuration
+# GPU-optimized deployment with vLLM backend
+# ============================================================================
+
+services:
+  # ============================================================================
+  # vLLM Service - OpenAI-compatible LLM inference
+  # Optimized for RTX 3090 Ti (24GB VRAM) with AWQ quantization
+  # ============================================================================
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm
+    restart: unless-stopped
+    
+    # GPU configuration - RTX 3090 Ti
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${GPU_DEVICE_ID:-0}']
+              capabilities: [gpu, compute, utility]
+        limits:
+          memory: ${VLLM_MEM_LIMIT:-28g}
+    
+    environment:
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-0}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HF_TOKEN=${HF_TOKEN:-}
+      - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
+      # Optimize CUDA for RTX 3090 Ti (Ampere architecture)
+      - CUDA_LAUNCH_BLOCKING=0
+      - TORCH_CUDA_ARCH_LIST=8.6
+    
+    # AWQ quantized model with RTX 3090 Ti optimizations
+    command: >
+      --model ${VLLM_MODEL:-hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4}
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE:-1}
+      --max-model-len ${VLLM_MAX_MODEL_LEN:-8192}
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION:-0.90}
+      --dtype ${VLLM_DTYPE:-float16}
+      --quantization ${VLLM_QUANTIZATION:-awq}
+      --max-num-seqs ${VLLM_MAX_NUM_SEQS:-32}
+      --max-num-batched-tokens ${VLLM_MAX_NUM_BATCHED_TOKENS:-8192}
+      --swap-space ${VLLM_SWAP_SPACE:-4}
+      --enable-auto-tool-choice
+      --tool-call-parser hermes
+      --trust-remote-code
+      --disable-log-requests
+    
+    ports:
+      - "${VLLM_PORT:-8080}:8000"
+    
+    volumes:
+      - vllm_cache:/root/.cache/huggingface
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s  # vLLM needs time to load models
+    
+    # Network
+    networks:
+      - fasttalk-network
+    
+    # Shared memory for tensor operations
+    shm_size: ${VLLM_SHM_SIZE:-8g}
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+
+  # ============================================================================
+  # LLM Microservice with PydanticAI
+  # ============================================================================
+  llm-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.vllm
+      args:
+        VLLM_MODEL: ${VLLM_MODEL:-meta-llama/Llama-3.2-3B-Instruct}
+    image: fasttalk-llm-service-vllm:latest
+    container_name: llm-service
+    restart: unless-stopped
+
+    # GPU configuration (for any local model operations)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${GPU_DEVICE_ID:-0}']
+              capabilities: [gpu, compute, utility]
+          memory: 4g
+        limits:
+          memory: ${LLM_SERVICE_MEM_LIMIT:-8g}
+
+    environment:
+      # GPU Configuration
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-0}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+      # LLM Provider Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-vllm}
+      
+      # vLLM Configuration
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-http://vllm:8000/v1}
+      - VLLM_MODEL=${VLLM_MODEL:-meta-llama/Llama-3.2-3B-Instruct}
+      - VLLM_API_KEY=${VLLM_API_KEY:-not-needed}
+      
+      # Ollama Configuration (fallback)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - LLM_MODEL=${LLM_MODEL:-llama3.2:1b}
+
+      # PydanticAI Configuration
+      - PYDANTIC_AI_MODEL=openai:${VLLM_MODEL:-meta-llama/Llama-3.2-3B-Instruct}
+      - ENABLE_WEB_SEARCH=${ENABLE_WEB_SEARCH:-true}
+      - ENABLE_TOOLS=${ENABLE_TOOLS:-true}
+      - DUCKDUCKGO_RATE_LIMIT=${DUCKDUCKGO_RATE_LIMIT:-1.0}
+
+      # Server Configuration
+      - LLM_HOST=0.0.0.0
+      - LLM_PORT=8000
+      - LLM_MONITORING_PORT=9092
+      - LLM_MAX_CONNECTIONS=${LLM_MAX_CONNECTIONS:-50}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # Generation Configuration
+      - DEFAULT_TEMPERATURE=${DEFAULT_TEMPERATURE:-0.7}
+      - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-2048}
+      - DEFAULT_CONTEXT_WINDOW=${DEFAULT_CONTEXT_WINDOW:-8192}
+      - DEFAULT_TOP_P=${DEFAULT_TOP_P:-0.9}
+
+      # Session Configuration
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-3600}
+      - MAX_HISTORY_LENGTH=${MAX_HISTORY_LENGTH:-50}
+
+    ports:
+      - "${LLM_PORT:-8000}:8000"
+      - "${LLM_MONITORING_PORT:-9092}:9092"
+
+    volumes:
+      - llm_logs:/app/logs
+
+    # Shared memory for tensor operations
+    shm_size: ${SHM_SIZE:-2g}
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+    # Network
+    networks:
+      - fasttalk-network
+    
+    # Dependencies
+    depends_on:
+      vllm:
+        condition: service_healthy
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+
+# ============================================================================
+# Named Volumes
+# ============================================================================
+volumes:
+  llm_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_PATH:-./logs}
+  vllm_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VLLM_CACHE_PATH:-./vllm-cache}
+
+# ============================================================================
+# Network Configuration
+# ============================================================================
+networks:
+  fasttalk-network:
+    name: fasttalk-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.20.0.0/16}
+          gateway: ${NETWORK_GATEWAY:-172.20.0.1}

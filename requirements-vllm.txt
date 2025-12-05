@@ -1,0 +1,47 @@
+# ============================================================================
+# LLM Service Dependencies - vLLM + PydanticAI Edition
+# ============================================================================
+
+# Web Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+websockets>=13.0
+python-multipart>=0.0.20
+
+# ============================================================================
+# PydanticAI - Agent Framework
+# ============================================================================
+pydantic-ai>=0.0.40
+pydantic-ai-slim>=0.0.40
+
+# OpenAI client for vLLM (OpenAI-compatible API)
+openai>=1.50.0
+
+# Web search tool
+duckduckgo-search>=6.3.0
+
+# Async HTTP client
+httpx>=0.27.0
+
+# ============================================================================
+# Original Dependencies
+# ============================================================================
+
+# HTTP Client (for Ollama fallback)
+requests>=2.31.0
+
+# Monitoring
+flask>=3.0.0
+psutil>=6.0.0
+
+# Async & Utils
+aiofiles>=24.1.0
+python-dotenv>=1.0.1
+
+# Conversation Management (for turn detection if needed)
+transformers>=4.45.0
+torch>=2.5.0
+
+# Data validation
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
