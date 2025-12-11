@@ -21,7 +21,7 @@ python-dotenv==1.0.1
 
 # Conversation Management (for turn detection if needed)
 transformers==4.45.0
-torch==2.5.0
+torch==2.6.0
 
 # Data validation
 pydantic==2.9.0

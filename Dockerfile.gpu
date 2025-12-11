@@ -3,25 +3,13 @@
 # Multi-stage build for production deployment
 # ============================================================================
 
-# ============================================================================
-# Stage 1: Builder
-# ============================================================================
-FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04 AS builder
+FROM fasttalk/base:cuda12.1-py310-torch260 AS builder
 
 # Prevent interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python and build dependencies
-RUN apt-get update && apt-get install -y \
-    python3.11 \
-    python3.11-venv \
-    python3-pip \
-    python3.11-dev \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create virtual environment
-RUN python3.11 -m venv /opt/venv
+# Create virtual environment that can see system site-packages (shared torch layer)
+RUN python -m venv /opt/venv --system-site-packages
 
 # Activate venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -32,23 +20,13 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 # Copy requirements
 COPY requirements.txt /tmp/requirements.txt
 
-# Install Python dependencies
+# Install Python dependencies (torch already satisfied from base layer)
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-# ============================================================================
-# Stage 2: Runtime
-# ============================================================================
-FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
+FROM fasttalk/base:cuda12.1-py310-torch260
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    python3.11 \
-    python3-pip \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
