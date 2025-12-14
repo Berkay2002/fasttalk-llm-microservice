@@ -1,28 +1,35 @@
-# ============================================================================
-# LLM Service Dependencies
-# ============================================================================
+# LLM Service Dependencies (matching backend-orchestration)
 
-# Web Framework
-fastapi==0.115.0
-uvicorn[standard]==0.30.0
-websockets==13.0
-python-multipart==0.0.9
+# LLM providers (matching backend-orchestration)
+ollama
+openai
 
-# HTTP Client for Ollama
-requests==2.32.3
+# WebSocket server dependencies (matching backend-orchestration)
+fastapi
+uvicorn
+websockets
+
+# Configuration (matching backend-orchestration)
+python-dotenv
+
+# HTTP client
+requests
+
+# Data processing (matching backend-orchestration)
+numpy  # For data handling
 
 # Monitoring
-flask==3.0.3
-psutil==6.0.0
+flask
+psutil
 
 # Async & Utils
-aiofiles==24.1.0
-python-dotenv==1.0.1
+aiofiles
+python-multipart
 
 # Conversation Management (for turn detection if needed)
-transformers==4.45.0
-torch==2.5.0
+transformers
+torch
 
 # Data validation
-pydantic==2.9.0
-pydantic-settings==2.5.0
+pydantic
+pydantic-settings
